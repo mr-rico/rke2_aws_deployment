@@ -1,0 +1,5 @@
+---
+- import_playbook: playbooks/rke2_servers.yml
+- import_playbook: playbooks/rke2_agents.yml
+- import_playbook: playbooks/cluster_addons.yml
+- import_playbook: playbooks/deploy_app.yml

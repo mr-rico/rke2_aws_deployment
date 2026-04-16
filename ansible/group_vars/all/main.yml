@@ -1,0 +1,31 @@
+aws_region: us-east-1
+rke2_version: v1.30.6+rke2r1
+rke2_token: changeme-super-secret-token
+registry: registry.example.com/test-registry
+image_tag: latest
+app_hostname: app.example.com
+cluster_cidr: 10.42.0.0/16
+service_cidr: 10.43.0.0/16
+
+primary_server: "{{ groups['rke2_servers'][0] }}"
+rke2_api_private_ip: "{{ hostvars[primary_server].ansible_host }}"
+rke2_api_public_ip: "{{ hostvars[primary_server].public_ip | default('') }}"
+rke2_api_dns: "{{ api_dns_name | default('') }}"
+rke2_api_nlb: "{{ nlb_dns_name | default('') }}"
+
+rke2_tls_sans: >-
+  {{
+    [
+      rke2_api_private_ip,
+      rke2_api_public_ip,
+      rke2_api_dns,
+      rke2_api_nlb,
+      '127.0.0.1',
+      'localhost'
+    ]
+    | reject('equalto', '')
+    | list
+  }}
+
+rke2_kubeconfig_local: "{{ playbook_dir }}/kubeconfig"
+db_password: change-me

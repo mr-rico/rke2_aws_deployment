@@ -1,0 +1,32 @@
+---
+- name: Install ingress-nginx as a DaemonSet on worker nodes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    kubeconfig: "{{ playbook_dir }}/kubeconfig"
+  tasks:
+    - name: Wait for Kubernetes API
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig }}"
+        api_version: v1
+        kind: Node
+      register: node_info
+      retries: 30
+      delay: 10
+      until: (node_info.resources | length) >= 6
+
+    - name: Add ingress-nginx repo
+      shell: |
+        export KUBECONFIG={{ kubeconfig }}
+        /var/lib/rancher/rke2/bin/helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
+        /var/lib/rancher/rke2/bin/helm repo update
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Install ingress-nginx with host networking
+      shell: |
+        export KUBECONFIG={{ kubeconfig }}
+        /var/lib/rancher/rke2/bin/helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx           --namespace ingress-nginx           --create-namespace           --set controller.kind=DaemonSet           --set controller.hostNetwork=true           --set controller.dnsPolicy=ClusterFirstWithHostNet           --set controller.service.enabled=false           --set controller.admissionWebhooks.enabled=true           --set controller.nodeSelector.ingress-ready=true
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"

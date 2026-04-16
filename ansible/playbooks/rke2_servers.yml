@@ -1,0 +1,118 @@
+---
+- name: Install and configure RKE2 servers
+  hosts: rke2_servers
+  become: true
+  vars:
+    primary_server: "{{ groups['rke2_servers'][0] }}"
+  tasks:
+    - name: Install base packages
+      package:
+        name:
+          - curl
+          - tar
+          - policycoreutils-python-utils
+        state: present
+
+    - name: Create RKE2 config directory
+      file:
+        path: /etc/rancher/rke2
+        state: directory
+        mode: '0755'
+
+    - name: Render server config on primary server
+      copy:
+        dest: /etc/rancher/rke2/config.yaml
+        mode: '0600'
+        content: |
+          token: {{ rke2_token }}
+          node-name: "{{ inventory_hostname }}"
+          write-kubeconfig-mode: "0644"
+          tls-san:
+          {% for san in rke2_tls_sans %}
+            - {{ san }}
+          {% endfor %}
+          cni: canal
+          cluster-cidr: {{ cluster_cidr }}
+          service-cidr: {{ service_cidr }}
+          disable:
+            - rke2-ingress-nginx
+      when: inventory_hostname == primary_server
+
+    - name: Render server config on joining servers
+      copy:
+        dest: /etc/rancher/rke2/config.yaml
+        mode: '0600'
+        content: |
+          server: "https://{{ hostvars[primary_server].private_ip }}:9345"
+          token: "{{ rke2_token }}"
+          node-name: "{{ inventory_hostname }}"
+          write-kubeconfig-mode: "0644"
+          {% if rke2_tls_sans is defined and rke2_tls_sans | length > 0 %}
+          tls-san:
+          {% for san in rke2_tls_sans %}
+            - "{{ san }}"
+          {% endfor %}
+          {% endif %}
+          cni: cilium
+          cluster-cidr: "{{ cluster_cidr }}"
+          service-cidr: "{{ service_cidr }}"
+          disable:
+            - rke2-ingress-nginx
+      when: inventory_hostname != primary_server
+
+    - name: Ensure RKE2 sysctl settings are present
+      copy:
+        dest: /etc/sysctl.d/99-rke2.conf
+        mode: '0644'
+        content: |
+          net.ipv4.ip_forward=1
+          net.bridge.bridge-nf-call-iptables=1
+          net.bridge.bridge-nf-call-ip6tables=1
+
+    - name: Apply sysctl settings
+      command: sysctl --system
+
+    - name: Disable NetworkManager cloud setup units required by RKE2
+      systemd:
+        name: "{{ item }}"
+        enabled: false
+        state: stopped
+      loop:
+        - nm-cloud-setup.service
+        - nm-cloud-setup.timer
+      ignore_errors: true
+
+    - name: Install RKE2
+      shell: curl -sfL https://get.rke2.io | INSTALL_RKE2_VERSION={{ rke2_version }} sh -
+      args:
+        creates: /usr/local/bin/rke2
+
+    - name: Enable RKE2 server
+      systemd:
+        name: rke2-server
+        enabled: true
+        state: started
+
+    - name: Wait for node token file
+      wait_for:
+        path: /var/lib/rancher/rke2/server/node-token
+        timeout: 300
+      when: inventory_hostname == primary_server
+
+    - name: Fetch kubeconfig from primary
+      fetch:
+        src: /etc/rancher/rke2/rke2.yaml
+        dest: "{{ rke2_kubeconfig_local }}"
+        flat: true
+      when: inventory_hostname == primary_server
+
+- name: Fix local kubeconfig server endpoint
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Replace localhost endpoint with first server public IP
+      replace:
+        path: "{{ playbook_dir }}/kubeconfig"
+        regexp: 'https://127.0.0.1:6443'
+        replace: "https://{{ hostvars[groups['rke2_servers'][0]].public_ip }}:6443"

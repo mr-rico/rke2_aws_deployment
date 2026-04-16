@@ -1,0 +1,68 @@
+---
+- name: Deploy the application manifests
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    kubeconfig: "{{ playbook_dir }}/kubeconfig"
+    frontend_image: "{{ registry }}/frontend:{{ image_tag }}"
+    backend_image: "{{ registry }}/backend:{{ image_tag }}"
+  tasks:
+    - name: Apply namespace
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        src: "{{ playbook_dir }}/../k8s/namespace.yaml"
+
+    - name: Render secret manifest
+      copy:
+        dest: "{{ playbook_dir }}/rendered-secret.yaml"
+        content: |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: app-secrets
+            namespace: test-demo
+          type: Opaque
+          stringData:
+            DB_NAME: cars
+            DB_USER: carsapp
+            DB_PASSWORD: {{ db_password }}
+
+    - name: Render backend manifest
+      copy:
+        dest: "{{ playbook_dir }}/rendered-backend.yaml"
+        content: "{{ lookup('file', playbook_dir + '/../k8s/backend-deployment.yaml') | replace('__BACKEND_IMAGE__', backend_image) }}"
+
+    - name: Render frontend manifest
+      copy:
+        dest: "{{ playbook_dir }}/rendered-frontend.yaml"
+        content: "{{ lookup('file', playbook_dir + '/../k8s/frontend-deployment.yaml') | replace('__FRONTEND_IMAGE__', frontend_image) }}"
+
+    - name: Render ingress manifest
+      copy:
+        dest: "{{ playbook_dir }}/rendered-ingress.yaml"
+        content: "{{ lookup('file', playbook_dir + '/../k8s/ingress.yaml') | replace('__APP_HOSTNAME__', app_hostname) }}"
+
+    - name: Apply shared manifests
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        src: "{{ item }}"
+      loop:
+        - "{{ playbook_dir }}/rendered-secret.yaml"
+        - "{{ playbook_dir }}/../k8s/postgres-init-configmap.yaml"
+        - "{{ playbook_dir }}/../k8s/postgres-statefulset.yaml"
+        - "{{ playbook_dir }}/rendered-backend.yaml"
+        - "{{ playbook_dir }}/rendered-frontend.yaml"
+        - "{{ playbook_dir }}/../k8s/networkpolicy.yaml"
+        - "{{ playbook_dir }}/rendered-ingress.yaml"
+
+    - name: Wait for frontend rollout
+      shell: |
+        export KUBECONFIG={{ kubeconfig }}
+        kubectl -n test-demo rollout status deployment/frontend --timeout=300s
+        kubectl -n test-demo rollout status deployment/backend --timeout=300s
+        kubectl -n test-demo rollout status statefulset/postgres --timeout=300s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"

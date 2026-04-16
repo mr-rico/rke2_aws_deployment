@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Testing - RKE2 Demo</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 2rem; background: #f6f8fa; color: #1f2328; }
+      table { border-collapse: collapse; width: 100%; background: white; }
+      th, td { border: 1px solid #d0d7de; padding: 0.75rem; text-align: left; }
+      th { background: #eaeef2; }
+      .card { background: white; padding: 1.5rem; border: 1px solid #d0d7de; border-radius: 12px; margin-bottom: 1rem; }
+      .error { color: #b42318; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>3-tier app running on a 3x3 RKE2 cluster</h1>
+      <p>Frontend -> Backend -> PostgreSQL</p>
+      <p><strong>Backend URL:</strong> {{ backend_url }}</p>
+      {% if payload.error %}
+        <p class="error"><strong>Error:</strong> {{ payload.error }}</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2>Cars</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Make</th>
+            <th>Model</th>
+            <th>Year</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for car in payload.cars %}
+          <tr>
+            <td>{{ car.id }}</td>
+            <td>{{ car.make }}</td>
+            <td>{{ car.model }}</td>
+            <td>{{ car.year }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>

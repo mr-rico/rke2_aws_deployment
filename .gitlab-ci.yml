@@ -1,0 +1,51 @@
+image: registry.access.redhat.com/ubi9/ubi:latest
+
+stages:
+  - lint
+  - build_images
+  - terraform
+  - configure_cluster
+
+variables:
+  TF_IN_AUTOMATION: "true"
+
+before_script:
+  - dnf install -y python3 python3-pip unzip tar openssh-clients git which
+  - pip3 install ansible boto3 botocore
+  - curl -fsSL https://releases.hashicorp.com/terraform/1.8.5/terraform_1.8.5_linux_amd64.zip -o terraform.zip
+  - unzip -o terraform.zip -d /usr/local/bin
+  - terraform version
+  - ansible --version
+
+lint:
+  stage: lint
+  script:
+    - python3 -m py_compile apps/frontend/app.py apps/backend/app.py
+
+build_images:
+  stage: build_images
+  script:
+    - podman build -t ${CI_REGISTRY_IMAGE}/frontend:${CI_COMMIT_SHORT_SHA} apps/frontend
+    - podman build -t ${CI_REGISTRY_IMAGE}/backend:${CI_COMMIT_SHORT_SHA} apps/backend
+    - podman login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+    - podman push ${CI_REGISTRY_IMAGE}/frontend:${CI_COMMIT_SHORT_SHA}
+    - podman push ${CI_REGISTRY_IMAGE}/backend:${CI_COMMIT_SHORT_SHA}
+
+terraform_apply:
+  stage: terraform
+  script:
+    - cd terraform
+    - terraform init
+    - terraform apply -auto-approve
+  artifacts:
+    paths:
+      - ansible/inventory.ini
+      - terraform/kube_api_endpoint.txt
+      - terraform/nlb_dns_name.txt
+
+configure_cluster:
+  stage: configure_cluster
+  script:
+    - ansible-galaxy collection install -r ansible/requirements.yml
+    - cd ansible
+    - ansible-playbook -i inventory.ini site.yml         -e registry=${CI_REGISTRY_IMAGE}         -e image_tag=${CI_COMMIT_SHORT_SHA}         -e app_hostname=${APP_HOSTNAME}

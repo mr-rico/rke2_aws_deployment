@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: test-demo
+data:
+  01-cars.sql: |
+    CREATE TABLE IF NOT EXISTS cars (
+      id SERIAL PRIMARY KEY,
+      make VARCHAR(50) NOT NULL,
+      model VARCHAR(50) NOT NULL,
+      year INTEGER NOT NULL
+    );
+
+    INSERT INTO cars (make, model, year)
+    VALUES
+      ('Toyota', 'Camry', 2022),
+      ('Honda', 'Accord', 2023),
+      ('Ford', 'Mustang', 2021)
+    ON CONFLICT DO NOTHING;
