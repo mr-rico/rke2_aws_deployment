@@ -108,9 +108,10 @@ terraform output
 Create the Ansible vault or plain vars file for the database password if you want to override the default. Then run:
 
 ```bash
-cd ansible
+# cd ansible
 ansible-galaxy collection install -r requirements.yml
-ansible-playbook -i inventory.ini site.yml   -e registry=${REGISTRY}   -e image_tag=${TAG}   -e app_hostname=app.example.com
+ansible-playbook -i ansible/inventory.ini ansible/site.yml
+# ansible-playbook -i inventory.ini site.yml   -e registry=${REGISTRY}   -e image_tag=${TAG}   -e app_hostname=app.example.com
 cd ..
 ```
 
