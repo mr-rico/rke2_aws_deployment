@@ -1,1 +1,1 @@
-test-rke2-ingress-31a46f094641d542.elb.us-east-1.amazonaws.com
+test-rke2-ingress-6a163794e6f1a01e.elb.us-east-1.amazonaws.com
